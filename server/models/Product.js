@@ -6,6 +6,7 @@ const productSchema = new mongoose.Schema({
   description: { type: String, required: true },
   image: { type: String, required: true },
   category: { type: String, required: true, index: true },
+  audience: { type: String, enum: ['Women', 'Men', 'Kids', 'Unisex'], index: true },
   stock: { type: Number, required: true, min: 0, default: 0 },
   featured: { type: Boolean, default: false }
 }, { timestamps: true });

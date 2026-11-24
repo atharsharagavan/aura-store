@@ -1,28 +1,32 @@
-import { StrictMode, createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Link, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import api from './api';
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { Footer, Header, Toast } from './components';
+import { ShopProvider } from './shop-context';
+import { Auth, Cart, Checkout, Confirmation, Home, NotFound, Orders, ProductDetail, Products, TrackOrder, Wishlist } from './pages';
 import './styles.css';
 
-const Shop = createContext();
-const money = (value) => `$${Number(value).toFixed(2)}`;
-function useShop() { return useContext(Shop); }
-function App() {
-  const [cart, setCart] = useState(() => JSON.parse(localStorage.getItem('cart') || '[]'));
-  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || 'null'));
-  useEffect(() => localStorage.setItem('cart', JSON.stringify(cart)), [cart]);
-  const add = (product) => setCart((items) => { const found = items.find((i) => i._id === product._id); return found ? items.map((i) => i._id === product._id ? { ...i, quantity: i.quantity + 1 } : i) : [...items, { ...product, quantity: 1 }]; });
-  const value = useMemo(() => ({ cart, setCart, user, setUser, add }), [cart, user]);
-  return <Shop.Provider value={value}><Header /><main><Routes><Route path="/" element={<Home />} /><Route path="/products" element={<Products />} /><Route path="/products/:id" element={<ProductDetail />} /><Route path="/cart" element={<Cart />} /><Route path="/auth" element={<Auth />} /><Route path="/checkout" element={<Checkout />} /><Route path="/confirmation/:id" element={<Confirmation />} /><Route path="/orders" element={<Orders />} /></Routes></main></Shop.Provider>;
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [pathname]);
+  return null;
 }
-function Header() { const { cart, user, setUser } = useShop(); const count = cart.reduce((sum, item) => sum + item.quantity, 0); const logout = () => { localStorage.removeItem('token'); localStorage.removeItem('user'); setUser(null); }; return <header><Link className="logo" to="/">aura.</Link><nav><NavLink to="/products">Shop</NavLink>{user && <NavLink to="/orders">My orders</NavLink>}<NavLink to="/cart">Bag ({count})</NavLink>{user ? <button className="link-button" onClick={logout}>Log out</button> : <NavLink to="/auth">Sign in</NavLink>}</nav></header>; }
-function ProductCard({ product }) { return <article className="card"><Link to={`/products/${product._id}`}><img src={product.image} alt={product.name} /></Link><div><p className="eyebrow">{product.category}</p><Link to={`/products/${product._id}`}>{product.name}</Link><strong>{money(product.price)}</strong></div></article>; }
-function Home() { const [products, setProducts] = useState([]); useEffect(() => { api.get('/products?featured=true').then((r) => setProducts(r.data)); }, []); return <><section className="hero"><div><p className="eyebrow">New season, considered essentials</p><h1>Things made to<br /><i>live with.</i></h1><Link className="button" to="/products">Explore collection</Link></div></section><section className="section"><div className="section-title"><h2>Featured now</h2><Link to="/products">View all →</Link></div><div className="grid">{products.map((p) => <ProductCard key={p._id} product={p} />)}</div></section></> }
-function Products() { const [products, setProducts] = useState([]); const [category, setCategory] = useState(''); const [maxPrice, setMaxPrice] = useState(''); useEffect(() => { const params = new URLSearchParams(); if (category) params.set('category', category); if (maxPrice) params.set('maxPrice', maxPrice); api.get(`/products?${params}`).then((r) => setProducts(r.data)); }, [category, maxPrice]); return <section className="section"><p className="eyebrow">The collection</p><h1>Everyday objects.</h1><div className="filters"><select value={category} onChange={(e) => setCategory(e.target.value)}><option value="">All categories</option>{['Clothing', 'Accessories', 'Tech', 'Home'].map((x) => <option key={x}>{x}</option>)}</select><select value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)}><option value="">Any price</option><option value="50">Under $50</option><option value="100">Under $100</option></select></div><div className="grid">{products.map((p) => <ProductCard key={p._id} product={p} />)}</div></section>; }
-function ProductDetail() { const { id } = useParams(); const [product, setProduct] = useState(); const { add } = useShop(); useEffect(() => { api.get(`/products/${id}`).then((r) => setProduct(r.data)); }, [id]); if (!product) return <p className="section">Loading product…</p>; return <section className="detail section"><img src={product.image} alt={product.name} /><div><p className="eyebrow">{product.category}</p><h1>{product.name}</h1><h2>{money(product.price)}</h2><p>{product.description}</p><button className="button" onClick={() => add(product)}>Add to bag</button></div></section>; }
-function Cart() { const { cart, setCart } = useShop(); const total = cart.reduce((sum, x) => sum + x.price * x.quantity, 0); const change = (id, amount) => setCart((items) => items.map((x) => x._id === id ? { ...x, quantity: Math.max(1, x.quantity + amount) } : x)); if (!cart.length) return <section className="section"><h1>Your bag is empty.</h1><Link className="button" to="/products">Continue shopping</Link></section>; return <section className="section cart"><h1>Your bag</h1>{cart.map((x) => <div className="cart-row" key={x._id}><img src={x.image} alt="" /><div><h3>{x.name}</h3><p>{money(x.price)}</p><button onClick={() => change(x._id, -1)}>−</button> {x.quantity} <button onClick={() => change(x._id, 1)}>+</button></div><button className="link-button" onClick={() => setCart((items) => items.filter((i) => i._id !== x._id))}>Remove</button></div>)}<div className="total"><h2>Total</h2><h2>{money(total)}</h2></div><Link className="button" to="/checkout">Checkout</Link></section>; }
-function Auth() { const { setUser } = useShop(); const [signup, setSignup] = useState(false); const [error, setError] = useState(''); const navigate = useNavigate(); async function submit(e) { e.preventDefault(); const data = Object.fromEntries(new FormData(e.currentTarget)); try { const res = await api.post(`/auth/${signup ? 'signup' : 'login'}`, data); localStorage.setItem('token', res.data.token); localStorage.setItem('user', JSON.stringify(res.data.user)); setUser(res.data.user); navigate('/'); } catch (err) { setError(err.response?.data?.message || 'Something went wrong'); } } return <section className="section auth"><p className="eyebrow">Account</p><h1>{signup ? 'Create account' : 'Welcome back'}</h1><form onSubmit={submit}>{signup && <input name="name" placeholder="Full name" required />}<input name="email" type="email" placeholder="Email address" required /><input name="password" type="password" placeholder="Password" minLength="6" required />{error && <p className="error">{error}</p>}<button className="button">{signup ? 'Create account' : 'Sign in'}</button></form><button className="link-button" onClick={() => setSignup(!signup)}>{signup ? 'Already have an account? Sign in' : 'New here? Create an account'}</button></section>; }
-function Checkout() { const { cart, setCart, user } = useShop(); const navigate = useNavigate(); const total = cart.reduce((sum, x) => sum + x.price * x.quantity, 0); async function submit(e) { e.preventDefault(); if (!user) return navigate('/auth'); try { const address = Object.fromEntries(new FormData(e.currentTarget)); const { data } = await api.post('/orders', { address, items: cart.map(({ _id, name, price, quantity }) => ({ product: _id, name, price, quantity })) }); setCart([]); navigate(`/confirmation/${data._id}`); } catch (err) { alert(err.response?.data?.message || 'Unable to place order'); } } if (!cart.length) return <section className="section"><h1>Your bag is empty.</h1></section>; return <section className="section checkout"><div><p className="eyebrow">Checkout</p><h1>Delivery details</h1><form onSubmit={submit}><input name="fullName" placeholder="Full name" required /><input name="line1" placeholder="Address" required /><input name="city" placeholder="City" required /><input name="postalCode" placeholder="Postal code" required /><input name="country" placeholder="Country" required /><button className="button">Place order · {money(total)}</button></form></div><aside><h3>Order summary</h3>{cart.map((x) => <p key={x._id}>{x.name} × {x.quantity} <span>{money(x.price * x.quantity)}</span></p>)}<hr /><strong>Total <span>{money(total)}</span></strong></aside></section>; }
-function Confirmation() { const { id } = useParams(); return <section className="section success"><p className="eyebrow">Order confirmed</p><h1>Thank you.</h1><p>Your order <b>#{id.slice(-6).toUpperCase()}</b> is being prepared. This starter uses a mock checkout—no payment is taken.</p><Link className="button" to="/orders">View my orders</Link></section>; }
-function Orders() { const [orders, setOrders] = useState([]); const { user } = useShop(); useEffect(() => { if (user) api.get('/orders/mine').then((r) => setOrders(r.data)); }, [user]); if (!user) return <section className="section"><h1>Sign in to see your orders.</h1><Link className="button" to="/auth">Sign in</Link></section>; return <section className="section"><p className="eyebrow">Account</p><h1>My orders</h1>{orders.length ? orders.map((o) => <article className="order" key={o._id}><div><b>#{o._id.slice(-6).toUpperCase()}</b><p>{new Date(o.createdAt).toLocaleDateString()} · {o.status}</p></div><strong>{money(o.totalPrice)}</strong></article>) : <p>You have not placed an order yet.</p>}</section>; }
+
+function App() {
+  return <ShopProvider><ScrollToTop /><Header /><main className="site-main"><Routes>
+    <Route path="/" element={<Home />} />
+    <Route path="/products" element={<Products />} />
+    <Route path="/products/:id" element={<ProductDetail />} />
+    <Route path="/cart" element={<Cart />} />
+    <Route path="/wishlist" element={<Wishlist />} />
+    <Route path="/auth" element={<Auth />} />
+    <Route path="/checkout" element={<Checkout />} />
+    <Route path="/confirmation/:id" element={<Confirmation />} />
+    <Route path="/orders" element={<Orders />} />
+    <Route path="/track" element={<TrackOrder />} />
+    <Route path="/track/:id" element={<TrackOrder />} />
+    <Route path="*" element={<NotFound />} />
+  </Routes></main><Footer /><Toast /></ShopProvider>;
+}
+
 createRoot(document.getElementById('root')).render(<StrictMode><BrowserRouter><App /></BrowserRouter></StrictMode>);

@@ -5,6 +5,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   const filter = {};
   if (req.query.category) filter.category = req.query.category;
+  if (req.query.audience) filter.audience = req.query.audience;
   if (req.query.featured === 'true') filter.featured = true;
   if (req.query.maxPrice) filter.price = { $lte: Number(req.query.maxPrice) };
   res.json(await Product.find(filter).sort({ createdAt: -1 }));
